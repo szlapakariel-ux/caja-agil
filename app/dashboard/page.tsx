@@ -150,9 +150,9 @@ export default function DashboardPage() {
     }
   };
 
-  const closePendingDialog = () => {
+  const closePendingDialog = (message = "") => {
     setPendingDialog((d) => ({ ...d, open: false }));
-    setAssignResult("");
+    setAssignResult(message);
   };
 
   const toggleSelectId = (id: string) => {
@@ -282,7 +282,7 @@ export default function DashboardPage() {
                     </button>
 
                     <button
-                      onClick={closePendingDialog}
+                      onClick={() => closePendingDialog("Los movimientos quedaron separados de la caja actual.")}
                       className="w-full text-left rounded-xl border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 hover:border-gray-400 dark:hover:border-gray-500 px-4 py-4 transition-colors"
                     >
                       <p className="font-semibold text-gray-800 dark:text-gray-200">
@@ -346,7 +346,7 @@ export default function DashboardPage() {
                         Asignar seleccionados ({pendingDialog.selectedIds.size})
                       </Button>
                     </div>
-                    <button onClick={closePendingDialog} className="w-full text-sm text-gray-400 hover:text-gray-600 mt-2 text-center">
+                    <button onClick={() => closePendingDialog("Los movimientos quedaron separados de la caja actual.")} className="w-full text-sm text-gray-400 hover:text-gray-600 mt-2 text-center">
                       Dejar todos separados
                     </button>
                   </div>
@@ -363,6 +363,9 @@ export default function DashboardPage() {
             <div className="flex-1">
               <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
                 {summary?.pendingExpenses} egreso(s) pendiente(s) de revisión
+              </p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-300 mt-0.5">
+                Ya se descuentan del saldo hasta que los apruebes o rechaces.
               </p>
             </div>
             <Link href="/history"><Button variant="secondary" size="sm">Revisar</Button></Link>

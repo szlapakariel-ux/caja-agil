@@ -23,6 +23,10 @@ export async function PATCH(
           reviewedAt: new Date(),
           ...(notes ? { notes } : {}),
         },
+        include: {
+          createdBy: { select: { id: true, name: true } },
+          reviewedBy: { select: { id: true, name: true } },
+        },
       });
       return NextResponse.json(updated);
     }

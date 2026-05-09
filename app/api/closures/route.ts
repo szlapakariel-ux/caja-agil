@@ -6,7 +6,6 @@ import {
   calculateClosureDifference,
   MovementForCalc,
 } from "@/lib/cash-rules";
-import { MovementStatus, ApprovalStatus } from "@prisma/client";
 
 export async function GET(req: NextRequest) {
   try {
@@ -48,18 +47,19 @@ export async function POST(req: NextRequest) {
 
     const openSession = await prisma.cashSession.findFirst({ where: { status: "OPEN" } });
 
-    const movements = openSession
-      ? await prisma.cashMovement.findMany({
-          where: {
-            cashSessionId: openSession.id,
-            status: { not: MovementStatus.VOIDED },
-          },
-        })
-      : [];
+    // Use the same date scope as the dashboard so expectedTotal always matches
+    // the expectedBalance shown to the user before they open the closure form.
+    const today = new Date();
+    const start = new Date(today);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setHours(23, 59, 59, 999);
 
-    const openingAmount = openSession
-      ? openSession.openingAmount.toNumber()
-      : 0;
+    const movements = await prisma.cashMovement.findMany({
+      where: { createdAt: { gte: start, lte: end } },
+    });
+
+    const openingAmount = openSession ? openSession.openingAmount.toNumber() : 0;
 
     const movsForCalc: MovementForCalc[] = movements.map((m) => ({
       type: m.type,
@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
       },
       include: {
         createdBy: { select: { id: true, name: true } },
+        reviewedBy: { select: { id: true, name: true } },
       },
     });
 

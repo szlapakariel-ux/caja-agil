@@ -36,7 +36,7 @@ export function Header({ title }: { title?: string }) {
                   d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                 />
               </svg>
-              <span className="hidden sm:inline truncate max-w-[100px]">{currentUser.name}</span>
+              <span className="truncate max-w-[80px] sm:max-w-[100px]">{currentUser.name}</span>
               <span className="hidden sm:inline text-xs text-gray-400">
                 ({ROLE_LABELS[currentUser.role]})
               </span>

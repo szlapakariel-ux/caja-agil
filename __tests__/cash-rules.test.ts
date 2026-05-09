@@ -456,3 +456,70 @@ describe("Fix 5 — Rechazar egreso con 3 opciones", () => {
     expect(calculateExpectedBalance(openingAmount, [sale, voidedExpense, adj])).toBe(6500);
   });
 });
+
+// ─── Tests de consistencia dashboard vs cierre ────────────────────────────
+
+describe("Consistencia saldo dashboard vs expectedTotal cierre", () => {
+  test("misma función produce mismo resultado: dashboard y cierre coinciden", () => {
+    // Simula el conjunto de movimientos que ve el dashboard y que usará el cierre
+    const openingAmount = 5000;
+    const movements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 3000 }),
+      makeMov({ type: MovementType.SALE, amount: 1500 }),
+      makeMov({ type: MovementType.EXPENSE, amount: 400, approvalStatus: ApprovalStatus.APPROVED }),
+      makeMov({ type: MovementType.OWNER_WITHDRAWAL, amount: 1000 }),
+    ];
+    // Si dashboard y cierre usan la misma función con los mismos datos, el resultado es idéntico
+    const dashboardBalance = calculateExpectedBalance(openingAmount, movements);
+    const closureExpectedTotal = calculateExpectedBalance(openingAmount, movements);
+    expect(dashboardBalance).toBe(closureExpectedTotal);
+    expect(dashboardBalance).toBe(8100); // 5000 + 3000 + 1500 - 400 - 1000
+  });
+
+  test("movimiento withoutCashSession incluido en ambos cálculos", () => {
+    const openingAmount = 2000;
+    const sessionMovements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 1000 }),
+    ];
+    const withoutSessionMovements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 500 }),
+    ];
+    // El dashboard y el cierre (corregido) incluyen ambos conjuntos
+    const allMovements = [...sessionMovements, ...withoutSessionMovements];
+    expect(calculateExpectedBalance(openingAmount, allMovements)).toBe(3500);
+    // Solo con sesión (comportamiento anterior buggy) daría un número diferente
+    expect(calculateExpectedBalance(openingAmount, sessionMovements)).toBe(3000);
+  });
+
+  test("movimientos anulados no impactan el saldo esperado del cierre", () => {
+    const openingAmount = 5000;
+    const movements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 2000 }),
+      makeMov({ type: MovementType.EXPENSE, amount: 800, status: MovementStatus.VOIDED, approvalStatus: ApprovalStatus.REJECTED }),
+      makeMov({ type: MovementType.SALE, amount: 500, status: MovementStatus.VOIDED }),
+    ];
+    expect(calculateExpectedBalance(openingAmount, movements)).toBe(7000); // 5000 + 2000, anulados no cuentan
+  });
+
+  test("egreso pendiente SÍ descuenta del saldo esperado del cierre", () => {
+    const openingAmount = 5000;
+    const movements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 2000 }),
+      makeMov({ type: MovementType.EXPENSE, amount: 300, approvalStatus: ApprovalStatus.PENDING }),
+    ];
+    // El egreso pendiente impacta hasta que sea rechazado
+    expect(calculateExpectedBalance(openingAmount, movements)).toBe(6700); // 5000 + 2000 - 300
+  });
+
+  test("si Vanina carga el saldo esperado como contado, la diferencia es 0", () => {
+    const openingAmount = 5000;
+    const movements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 3000 }),
+      makeMov({ type: MovementType.EXPENSE, amount: 500, approvalStatus: ApprovalStatus.APPROVED }),
+    ];
+    const expectedTotal = calculateExpectedBalance(openingAmount, movements);
+    const countedTotal = expectedTotal; // Vanina cuenta exactamente lo esperado
+    const difference = calculateClosureDifference(expectedTotal, countedTotal);
+    expect(difference).toBe(0);
+  });
+});
