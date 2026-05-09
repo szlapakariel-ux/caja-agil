@@ -253,57 +253,62 @@ export async function PATCH(
 
       const adjDirection = adjustmentDirection ?? "NEGATIVE";
       const adjAmount = amount ? parseFloat(amount) : Number(movement.amount);
-
-      await prisma.cashMovement.update({
-        where: { id },
-        data: {
-          approvalStatus: "REJECTED",
-          rejectedByUserId: userId,
-          status: "VOIDED",
-          voidedAt: new Date(),
-          voidReason: reason,
-        },
-      });
-
-      await prisma.auditLog.create({
-        data: {
-          entityType: "CashMovement",
-          entityId: id,
-          action: "REJECT_AND_ADJUST",
-          previousValue: { approvalStatus: movement.approvalStatus, status: movement.status },
-          newValue: { approvalStatus: "REJECTED", status: "VOIDED" },
-          performedByUserId: userId,
-          reason,
-        },
-      });
-
+      // Code is reserved outside the transaction; a gap in sequence is acceptable if tx fails.
       const newCode = await getNextMovementCode();
-      const adjustment = await prisma.cashMovement.create({
-        data: {
-          code: newCode,
-          cashSessionId: movement.cashSessionId,
-          withoutCashSession: movement.withoutCashSession,
-          type: "CASH_ADJUSTMENT",
-          adjustmentDirection: adjDirection,
-          amount: adjAmount,
-          paymentMethod: paymentMethod ?? movement.paymentMethod,
-          description: description?.trim() || reason,
-          status: "ACTIVE",
-          approvalStatus: "NOT_REQUIRED",
-          createdByUserId: userId,
-        },
-      });
 
-      await prisma.auditLog.create({
-        data: {
-          entityType: "CashMovement",
-          entityId: adjustment.id,
-          action: "CREATE_FROM_REJECTION",
-          previousValue: undefined,
-          newValue: { code: newCode, type: "CASH_ADJUSTMENT", amount: adjAmount },
-          performedByUserId: userId,
-          reason: `Generado al rechazar ${movement.code}`,
-        },
+      const adjustment = await prisma.$transaction(async (tx) => {
+        await tx.cashMovement.update({
+          where: { id },
+          data: {
+            approvalStatus: "REJECTED",
+            rejectedByUserId: userId,
+            status: "VOIDED",
+            voidedAt: new Date(),
+            voidReason: reason,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            entityType: "CashMovement",
+            entityId: id,
+            action: "REJECT_AND_ADJUST",
+            previousValue: { approvalStatus: movement.approvalStatus, status: movement.status },
+            newValue: { approvalStatus: "REJECTED", status: "VOIDED" },
+            performedByUserId: userId,
+            reason,
+          },
+        });
+
+        const adj = await tx.cashMovement.create({
+          data: {
+            code: newCode,
+            cashSessionId: movement.cashSessionId,
+            withoutCashSession: movement.withoutCashSession,
+            type: "CASH_ADJUSTMENT",
+            adjustmentDirection: adjDirection,
+            amount: adjAmount,
+            paymentMethod: paymentMethod ?? movement.paymentMethod,
+            description: description?.trim() || reason,
+            status: "ACTIVE",
+            approvalStatus: "NOT_REQUIRED",
+            createdByUserId: userId,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            entityType: "CashMovement",
+            entityId: adj.id,
+            action: "CREATE_FROM_REJECTION",
+            previousValue: undefined,
+            newValue: { code: newCode, type: "CASH_ADJUSTMENT", amount: adjAmount },
+            performedByUserId: userId,
+            reason: `Generado al rechazar ${movement.code}`,
+          },
+        });
+
+        return adj;
       });
 
       return NextResponse.json(adjustment);
