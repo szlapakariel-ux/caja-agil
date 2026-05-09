@@ -1,0 +1,194 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  ADMIN
+  EMPLOYEE
+}
+
+enum PaymentMethod {
+  CASH
+  TRANSFER
+  CARD
+  MERCADO_PAGO
+  OTHER
+}
+
+enum MovementType {
+  SALE
+  EXPENSE
+  OWNER_WITHDRAWAL
+  OWNER_CONTRIBUTION
+  CASH_ADJUSTMENT
+}
+
+enum AdjustmentDirection {
+  POSITIVE
+  NEGATIVE
+}
+
+enum MovementStatus {
+  ACTIVE
+  CORRECTED
+  VOIDED
+}
+
+enum ApprovalStatus {
+  NOT_REQUIRED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum SessionStatus {
+  OPEN
+  CLOSED
+}
+
+enum ClosureType {
+  PARTIAL
+  FINAL
+}
+
+enum ClosureStatus {
+  PENDING_REVIEW
+  APPROVED
+  CORRECTED
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  role      UserRole
+  pinDemo   String?  @map("pin_demo")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  openedSessions    CashSession[]  @relation("OpenedBy")
+  closedSessions    CashSession[]  @relation("ClosedBy")
+  createdMovements  CashMovement[] @relation("CreatedBy")
+  approvedMovements CashMovement[] @relation("ApprovedBy")
+  rejectedMovements CashMovement[] @relation("RejectedBy")
+  createdClosures   CashClosure[]  @relation("ClosureCreatedBy")
+  reviewedClosures  CashClosure[]  @relation("ClosureReviewedBy")
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+model BusinessConfig {
+  id                   String          @id @default(cuid())
+  businessName         String          @default("Caja Simple") @map("business_name")
+  appDisplayName       String          @default("Caja Simple MVP") @map("app_display_name")
+  currency             String          @default("ARS")
+  activePaymentMethods PaymentMethod[] @map("active_payment_methods")
+  themePreference      String          @default("system") @map("theme_preference")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  @@map("business_config")
+}
+
+model CashSession {
+  id             String        @id @default(cuid())
+  code           String        @unique
+  openedAt       DateTime      @default(now()) @map("opened_at")
+  closedAt       DateTime?     @map("closed_at")
+  openingAmount  Decimal       @default(0) @map("opening_amount") @db.Decimal(12, 2)
+  status         SessionStatus @default(OPEN)
+  openedByUserId String        @map("opened_by_user_id")
+  closedByUserId String?       @map("closed_by_user_id")
+  notes          String?
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  openedBy  User           @relation("OpenedBy", fields: [openedByUserId], references: [id])
+  closedBy  User?          @relation("ClosedBy", fields: [closedByUserId], references: [id])
+  movements CashMovement[]
+  closures  CashClosure[]
+
+  @@map("cash_sessions")
+}
+
+model CashMovement {
+  id                  String               @id @default(cuid())
+  code                String               @unique
+  cashSessionId       String?              @map("cash_session_id")
+  withoutCashSession  Boolean              @default(false) @map("without_cash_session")
+  type                MovementType
+  adjustmentDirection AdjustmentDirection? @map("adjustment_direction")
+  amount              Decimal              @db.Decimal(12, 2)
+  paymentMethod       PaymentMethod        @map("payment_method")
+  description         String?
+  status              MovementStatus       @default(ACTIVE)
+  approvalStatus      ApprovalStatus       @default(NOT_REQUIRED) @map("approval_status")
+  createdByUserId     String               @map("created_by_user_id")
+  approvedByUserId    String?              @map("approved_by_user_id")
+  rejectedByUserId    String?              @map("rejected_by_user_id")
+  correctionReason    String?              @map("correction_reason")
+  voidReason          String?              @map("void_reason")
+  originalAmount      Decimal?             @map("original_amount") @db.Decimal(12, 2)
+  originalDescription String?              @map("original_description")
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+  voidedAt            DateTime?            @map("voided_at")
+
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id])
+  createdBy   User         @relation("CreatedBy", fields: [createdByUserId], references: [id])
+  approvedBy  User?        @relation("ApprovedBy", fields: [approvedByUserId], references: [id])
+  rejectedBy  User?        @relation("RejectedBy", fields: [rejectedByUserId], references: [id])
+
+  @@map("cash_movements")
+}
+
+model CashClosure {
+  id               String        @id @default(cuid())
+  code             String        @unique
+  cashSessionId    String?       @map("cash_session_id")
+  type             ClosureType
+  expectedTotal    Decimal       @map("expected_total") @db.Decimal(12, 2)
+  countedTotal     Decimal       @map("counted_total") @db.Decimal(12, 2)
+  differenceTotal  Decimal       @map("difference_total") @db.Decimal(12, 2)
+  notes            String?
+  status           ClosureStatus @default(PENDING_REVIEW)
+  createdByUserId  String        @map("created_by_user_id")
+  reviewedByUserId String?       @map("reviewed_by_user_id")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  reviewedAt       DateTime?     @map("reviewed_at")
+
+  cashSession CashSession? @relation(fields: [cashSessionId], references: [id])
+  createdBy   User         @relation("ClosureCreatedBy", fields: [createdByUserId], references: [id])
+  reviewedBy  User?        @relation("ClosureReviewedBy", fields: [reviewedByUserId], references: [id])
+
+  @@map("cash_closures")
+}
+
+model AuditLog {
+  id                String       @id @default(cuid())
+  entityType        String       @map("entity_type")
+  entityId          String       @map("entity_id")
+  action            String
+  previousValue     Json?        @map("previous_value")
+  newValue          Json?        @map("new_value")
+  performedByUserId String       @map("performed_by_user_id")
+  reason            String?
+  createdAt         DateTime     @default(now()) @map("created_at")
+
+  performedBy User @relation(fields: [performedByUserId], references: [id])
+
+  @@map("audit_logs")
+}
+
+model Counter {
+  id      String @id @default(cuid())
+  name    String @unique
+  current Int    @default(0)
+
+  @@map("counters")
+}
