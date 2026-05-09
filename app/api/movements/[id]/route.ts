@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { getNextMovementCode } from "@/lib/codes";
 
 export async function GET(
   _req: NextRequest,
@@ -39,7 +40,7 @@ export async function PATCH(
   try {
     const { id } = await params;
     const body = await req.json();
-    const { action, userId, reason, amount, description, approvalStatus } = body;
+    const { action, userId, reason, amount, description, paymentMethod, approvalStatus, adjustmentDirection } = body;
 
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
@@ -102,6 +103,7 @@ export async function PATCH(
           originalDescription: movement.originalDescription ?? movement.description,
           ...(amount ? { amount: parseFloat(amount) } : {}),
           ...(description !== undefined ? { description: description?.trim() || null } : {}),
+          ...(paymentMethod ? { paymentMethod } : {}),
         },
       });
 
@@ -113,11 +115,13 @@ export async function PATCH(
           previousValue: {
             amount: movement.amount,
             description: movement.description,
+            paymentMethod: movement.paymentMethod,
             status: movement.status,
           },
           newValue: {
             amount: amount ?? movement.amount,
             description: description ?? movement.description,
+            paymentMethod: paymentMethod ?? movement.paymentMethod,
             status: "CORRECTED",
           },
           performedByUserId: userId,
@@ -188,6 +192,121 @@ export async function PATCH(
       });
 
       return NextResponse.json(updated);
+    }
+
+    if (action === "reject-and-correct") {
+      if (user.role !== "ADMIN") {
+        return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+      }
+      if (!reason?.trim()) {
+        return NextResponse.json({ error: "Se requiere motivo" }, { status: 400 });
+      }
+
+      const updated = await prisma.cashMovement.update({
+        where: { id },
+        data: {
+          approvalStatus: "APPROVED",
+          approvedByUserId: userId,
+          status: "CORRECTED",
+          correctionReason: reason,
+          originalAmount: movement.originalAmount ?? movement.amount,
+          originalDescription: movement.originalDescription ?? movement.description,
+          ...(amount ? { amount: parseFloat(amount) } : {}),
+          ...(description !== undefined ? { description: description?.trim() || null } : {}),
+          ...(paymentMethod ? { paymentMethod } : {}),
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          entityType: "CashMovement",
+          entityId: id,
+          action: "REJECT_AND_CORRECT",
+          previousValue: {
+            approvalStatus: movement.approvalStatus,
+            amount: movement.amount,
+            description: movement.description,
+            paymentMethod: movement.paymentMethod,
+          },
+          newValue: {
+            approvalStatus: "APPROVED",
+            status: "CORRECTED",
+            amount: amount ?? movement.amount,
+            description: description ?? movement.description,
+            paymentMethod: paymentMethod ?? movement.paymentMethod,
+          },
+          performedByUserId: userId,
+          reason,
+        },
+      });
+
+      return NextResponse.json(updated);
+    }
+
+    if (action === "reject-and-adjust") {
+      if (user.role !== "ADMIN") {
+        return NextResponse.json({ error: "Sin permisos" }, { status: 403 });
+      }
+      if (!reason?.trim()) {
+        return NextResponse.json({ error: "Se requiere motivo" }, { status: 400 });
+      }
+
+      const adjDirection = adjustmentDirection ?? "NEGATIVE";
+      const adjAmount = amount ? parseFloat(amount) : Number(movement.amount);
+
+      await prisma.cashMovement.update({
+        where: { id },
+        data: {
+          approvalStatus: "REJECTED",
+          rejectedByUserId: userId,
+          status: "VOIDED",
+          voidedAt: new Date(),
+          voidReason: reason,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          entityType: "CashMovement",
+          entityId: id,
+          action: "REJECT_AND_ADJUST",
+          previousValue: { approvalStatus: movement.approvalStatus, status: movement.status },
+          newValue: { approvalStatus: "REJECTED", status: "VOIDED" },
+          performedByUserId: userId,
+          reason,
+        },
+      });
+
+      const newCode = await getNextMovementCode();
+      const adjustment = await prisma.cashMovement.create({
+        data: {
+          code: newCode,
+          cashSessionId: movement.cashSessionId,
+          withoutCashSession: movement.withoutCashSession,
+          type: "CASH_ADJUSTMENT",
+          adjustmentDirection: adjDirection,
+          amount: adjAmount,
+          paymentMethod: paymentMethod ?? movement.paymentMethod,
+          description: description?.trim() || reason,
+          status: "ACTIVE",
+          approvalStatus: "NOT_REQUIRED",
+          createdByUserId: userId,
+        },
+      });
+
+      await prisma.auditLog.create({
+        data: {
+          entityType: "CashMovement",
+          entityId: adjustment.id,
+          action: "CREATE_FROM_REJECTION",
+          previousValue: undefined,
+          newValue: { code: newCode, type: "CASH_ADJUSTMENT", amount: adjAmount },
+          performedByUserId: userId,
+          reason: `Generado al rechazar ${movement.code}`,
+        },
+      });
+
+      return NextResponse.json(adjustment);
     }
 
     return NextResponse.json({ error: "Acción no reconocida" }, { status: 400 });

@@ -10,12 +10,13 @@ import { ROLE_LABELS } from "@/lib/format";
 type User = { id: string; name: string; role: string };
 
 export default function LoginPage() {
-  const { currentUser, setCurrentUser } = useUser();
+  const { currentUser, setCurrentUser, forgetPersistedUser } = useUser();
   const router = useRouter();
 
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [rememberUser, setRememberUser] = useState(false);
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState("");
   const [verifying, setVerifying] = useState(false);
@@ -42,7 +43,10 @@ export default function LoginPage() {
       setPin("");
       setPinError("");
     } else {
-      setCurrentUser({ id: user.id, name: user.name, role: user.role as "ADMIN" | "EMPLOYEE" });
+      setCurrentUser(
+        { id: user.id, name: user.name, role: user.role as "ADMIN" | "EMPLOYEE" },
+        rememberUser
+      );
       router.push("/dashboard");
     }
   };
@@ -59,11 +63,10 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (data.ok) {
-        setCurrentUser({
-          id: selectedUser.id,
-          name: selectedUser.name,
-          role: selectedUser.role as "ADMIN" | "EMPLOYEE",
-        });
+        setCurrentUser(
+          { id: selectedUser.id, name: selectedUser.name, role: selectedUser.role as "ADMIN" | "EMPLOYEE" },
+          rememberUser
+        );
         router.push("/dashboard");
       } else {
         setPinError("PIN incorrecto. Intentá de nuevo.");
@@ -127,6 +130,22 @@ export default function LoginPage() {
                   </svg>
                 </button>
               ))}
+
+              {/* Checkbox recordar usuario */}
+              <label className="flex items-center gap-3 px-2 py-1 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={rememberUser}
+                  onChange={(e) => {
+                    setRememberUser(e.target.checked);
+                    if (!e.target.checked) forgetPersistedUser();
+                  }}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  Recordar este usuario en este dispositivo
+                </span>
+              </label>
             </div>
           ) : (
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
@@ -154,6 +173,22 @@ export default function LoginPage() {
                 {pinError && (
                   <p className="text-center text-sm text-red-500 font-medium">{pinError}</p>
                 )}
+
+                {/* Recordar también en el flujo de PIN */}
+                <label className="flex items-center gap-3 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberUser}
+                    onChange={(e) => {
+                      setRememberUser(e.target.checked);
+                      if (!e.target.checked) forgetPersistedUser();
+                    }}
+                    className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-600 dark:text-gray-400">
+                    Recordar en este dispositivo
+                  </span>
+                </label>
 
                 <Button
                   onClick={handlePinSubmit}

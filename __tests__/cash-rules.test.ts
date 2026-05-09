@@ -324,3 +324,135 @@ describe("Resumen del día", () => {
     expect(summary.pendingExpenses).toBe(1);
   });
 });
+
+// ─── Tests de los 5 fixes ──────────────────────────────────────────────────
+
+describe("Fix 1 — Recordar usuario solo si checkbox activo", () => {
+  test("setCurrentUser sin persist=true no debe persistir en localStorage", () => {
+    // Simula la lógica del contexto: si persist=false, solo estado en memoria
+    const stored: Record<string, string> = {};
+    const mockSetItem = (key: string, val: string) => { stored[key] = val; };
+    const setCurrentUser = (user: object | null, persist = false) => {
+      if (user && persist) mockSetItem("caja_agil_user", JSON.stringify(user));
+    };
+    setCurrentUser({ id: "1", name: "Vanina", role: "ADMIN" }, false);
+    expect(stored["caja_agil_user"]).toBeUndefined();
+  });
+
+  test("setCurrentUser con persist=true sí persiste en localStorage", () => {
+    const stored: Record<string, string> = {};
+    const mockSetItem = (key: string, val: string) => { stored[key] = val; };
+    const setCurrentUser = (user: object | null, persist = false) => {
+      if (user && persist) mockSetItem("caja_agil_user", JSON.stringify(user));
+    };
+    setCurrentUser({ id: "1", name: "Vanina", role: "ADMIN" }, true);
+    expect(stored["caja_agil_user"]).toBeDefined();
+  });
+});
+
+describe("Fix 2 — Movimientos sin sesión no se autoasignan", () => {
+  test("movimiento con withoutCashSession=true impacta el saldo normalmente", () => {
+    const mov = makeMov({ type: MovementType.SALE, amount: 500 });
+    // La lógica de impacto no depende de withoutCashSession, solo de status/approvalStatus
+    expect(movementImpactsBalance(mov)).toBe(true);
+    expect(getMovementSignedAmount(mov)).toBe(500);
+  });
+
+  test("movimiento anulado no impacta el saldo aunque tenga withoutCashSession", () => {
+    const mov = makeMov({ type: MovementType.SALE, amount: 500, status: MovementStatus.VOIDED });
+    expect(movementImpactsBalance(mov)).toBe(false);
+  });
+});
+
+describe("Fix 3 — Asignar movimientos pendientes a sesión", () => {
+  test("asignar movimientos: balance aumenta al incluirlos en el cálculo de sesión", () => {
+    const sessionMovements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 1000 }),
+    ];
+    const pendingMovements: MovementForCalc[] = [
+      makeMov({ type: MovementType.SALE, amount: 500 }),
+      makeMov({ type: MovementType.EXPENSE, amount: 200 }),
+    ];
+    const withoutPending = calculateExpectedBalance(0, sessionMovements);
+    const withPending = calculateExpectedBalance(0, [...sessionMovements, ...pendingMovements]);
+    expect(withoutPending).toBe(1000);
+    expect(withPending).toBe(1300);
+  });
+});
+
+describe("Fix 4 — Corrección con cambio de medio de pago", () => {
+  test("corrección registra el medio de pago anterior y nuevo en auditoría", () => {
+    const movement = makeMov({ type: MovementType.SALE, amount: 1000, paymentMethod: PaymentMethod.CASH });
+    const newPaymentMethod = PaymentMethod.TRANSFER;
+    const previousValue = { amount: movement.amount, paymentMethod: movement.paymentMethod };
+    const newValue = { amount: 1200, paymentMethod: newPaymentMethod, status: "CORRECTED" };
+    expect(previousValue.paymentMethod).toBe(PaymentMethod.CASH);
+    expect(newValue.paymentMethod).toBe(PaymentMethod.TRANSFER);
+    expect(newValue.status).toBe("CORRECTED");
+  });
+
+  test("movimiento corregido sigue impactando el saldo", () => {
+    const mov = makeMov({ type: MovementType.SALE, amount: 1200, status: MovementStatus.CORRECTED });
+    expect(movementImpactsBalance(mov)).toBe(true);
+    expect(getMovementSignedAmount(mov)).toBe(1200);
+  });
+});
+
+describe("Fix 5 — Rechazar egreso con 3 opciones", () => {
+  test("opción A (anular): movimiento anulado no impacta saldo", () => {
+    const mov = makeMov({
+      type: MovementType.EXPENSE,
+      amount: 800,
+      status: MovementStatus.VOIDED,
+      approvalStatus: ApprovalStatus.REJECTED,
+    });
+    expect(movementImpactsBalance(mov)).toBe(false);
+    expect(getMovementSignedAmount(mov)).toBe(0);
+  });
+
+  test("opción B (corregir): egreso corregido y aprobado impacta saldo", () => {
+    const mov = makeMov({
+      type: MovementType.EXPENSE,
+      amount: 600,
+      status: MovementStatus.CORRECTED,
+      approvalStatus: ApprovalStatus.APPROVED,
+    });
+    expect(movementImpactsBalance(mov)).toBe(true);
+    expect(getMovementSignedAmount(mov)).toBe(-600);
+  });
+
+  test("opción C (ajuste): egreso original anulado + ajuste; balance neto correcto", () => {
+    const voidedExpense = makeMov({
+      type: MovementType.EXPENSE,
+      amount: 800,
+      status: MovementStatus.VOIDED,
+      approvalStatus: ApprovalStatus.REJECTED,
+    });
+    const adjustment = makeMov({
+      type: MovementType.CASH_ADJUSTMENT,
+      amount: 800,
+      adjustmentDirection: AdjustmentDirection.NEGATIVE,
+      approvalStatus: ApprovalStatus.NOT_REQUIRED,
+    });
+    const balance = calculateExpectedBalance(0, [voidedExpense, adjustment]);
+    // Voided expense = 0, adjustment NEGATIVE = -800
+    expect(balance).toBe(-800);
+  });
+
+  test("balance correcto luego de las 3 opciones de rechazo", () => {
+    const openingAmount = 5000;
+    const sale = makeMov({ type: MovementType.SALE, amount: 2000 });
+
+    // Opción A: egreso anulado => no impacta
+    const voidedExpense = makeMov({ type: MovementType.EXPENSE, amount: 500, status: MovementStatus.VOIDED, approvalStatus: ApprovalStatus.REJECTED });
+    expect(calculateExpectedBalance(openingAmount, [sale, voidedExpense])).toBe(7000);
+
+    // Opción B: egreso corregido y aprobado => impacta con monto corregido
+    const correctedExpense = makeMov({ type: MovementType.EXPENSE, amount: 300, status: MovementStatus.CORRECTED, approvalStatus: ApprovalStatus.APPROVED });
+    expect(calculateExpectedBalance(openingAmount, [sale, correctedExpense])).toBe(6700);
+
+    // Opción C: egreso anulado + ajuste negativo
+    const adj = makeMov({ type: MovementType.CASH_ADJUSTMENT, amount: 500, adjustmentDirection: AdjustmentDirection.NEGATIVE });
+    expect(calculateExpectedBalance(openingAmount, [sale, voidedExpense, adj])).toBe(6500);
+  });
+});

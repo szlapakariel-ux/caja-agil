@@ -10,13 +10,15 @@ export type AppUser = {
 
 type UserContextType = {
   currentUser: AppUser | null;
-  setCurrentUser: (user: AppUser | null) => void;
+  setCurrentUser: (user: AppUser | null, persist?: boolean) => void;
+  forgetPersistedUser: () => void;
   logout: () => void;
 };
 
 const UserContext = createContext<UserContextType>({
   currentUser: null,
   setCurrentUser: () => {},
+  forgetPersistedUser: () => {},
   logout: () => {},
 });
 
@@ -34,19 +36,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } catch {}
   }, []);
 
-  const setCurrentUser = (user: AppUser | null) => {
+  const setCurrentUser = (user: AppUser | null, persist = false) => {
     setCurrentUserState(user);
-    if (user) {
+    if (user && persist) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
-    } else {
+    } else if (!user) {
       localStorage.removeItem(STORAGE_KEY);
     }
+    // Si persist=false y user != null: solo estado en memoria, sin localStorage
   };
 
-  const logout = () => setCurrentUser(null);
+  const forgetPersistedUser = () => {
+    localStorage.removeItem(STORAGE_KEY);
+  };
+
+  const logout = () => {
+    setCurrentUserState(null);
+    localStorage.removeItem(STORAGE_KEY);
+  };
 
   return (
-    <UserContext.Provider value={{ currentUser, setCurrentUser, logout }}>
+    <UserContext.Provider value={{ currentUser, setCurrentUser, forgetPersistedUser, logout }}>
       {children}
     </UserContext.Provider>
   );
