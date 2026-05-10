@@ -17,4 +17,7 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node_modules/.bin/next start -p ${PORT:-3000}"]
+COPY start.sh ./start.sh
+RUN chmod +x start.sh
+
+CMD ["sh", "start.sh"]
