@@ -9,6 +9,8 @@ export async function GET() {
         id: true,
         name: true,
         role: true,
+        avatarColor: true,
+        avatarIcon: true,
       },
       orderBy: [{ role: "asc" }, { name: "asc" }],
     });
@@ -17,6 +19,8 @@ export async function GET() {
       id: u.id,
       name: u.name,
       role: u.role,
+      avatarColor: u.avatarColor,
+      avatarIcon: u.avatarIcon,
     }));
 
     return NextResponse.json(usersForClient);

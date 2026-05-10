@@ -65,19 +65,30 @@ async function main() {
 
   const empleado1 = await prisma.user.create({
     data: {
-      name: "Empleado 1",
+      name: "Male",
       role: UserRole.EMPLOYEE,
+      avatarIcon: "male",
+      avatarColor: "white",
     },
   });
 
   const empleado2 = await prisma.user.create({
     data: {
-      name: "Empleado 2",
+      name: "Ariel",
       role: UserRole.EMPLOYEE,
+      avatarColor: "green",
     },
   });
 
-  console.log("✅ Usuarios creados: Vanina, Empleado 1, Empleado 2");
+  await prisma.user.create({
+    data: {
+      name: "Maty",
+      role: UserRole.EMPLOYEE,
+      avatarColor: "brown",
+    },
+  });
+
+  console.log("✅ Usuarios creados: Vanina, Male, Ariel, Maty");
 
   const mov1Code = await getNextCode("movement", "MOV");
   const mov2Code = await getNextCode("movement", "MOV");
@@ -307,8 +318,9 @@ async function main() {
   console.log("🎉 Seed completado exitosamente!");
   console.log("\nUsuarios disponibles:");
   console.log("  - Vanina (Admin) — PIN: 1234");
-  console.log("  - Empleado 1 (sin PIN)");
-  console.log("  - Empleado 2 (sin PIN)");
+  console.log("  - Male (sin PIN)");
+  console.log("  - Ariel (sin PIN)");
+  console.log("  - Maty (sin PIN)");
 }
 
 main()

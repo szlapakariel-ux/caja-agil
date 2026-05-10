@@ -7,7 +7,30 @@ import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { ROLE_LABELS } from "@/lib/format";
 
-type User = { id: string; name: string; role: string };
+type User = { id: string; name: string; role: string; avatarColor?: string | null; avatarIcon?: string | null };
+
+const AVATAR_COLORS: Record<string, { bg: string; text: string }> = {
+  white:  { bg: "bg-gray-100 dark:bg-gray-700",       text: "text-gray-500 dark:text-gray-300" },
+  green:  { bg: "bg-green-100 dark:bg-green-900/40",  text: "text-green-700 dark:text-green-400" },
+  brown:  { bg: "bg-amber-100 dark:bg-amber-900/40",  text: "text-amber-800 dark:text-amber-400" },
+};
+const DEFAULT_AVATAR = { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-600 dark:text-blue-400" };
+
+function AvatarContent({ user }: { user: User }) {
+  const colors = (user.avatarColor && AVATAR_COLORS[user.avatarColor]) ?? DEFAULT_AVATAR;
+  const isMale = user.avatarIcon === "male";
+  return (
+    <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg flex-shrink-0 ${colors.bg} ${colors.text}`}>
+      {isMale ? (
+        <svg viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
+          <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
+        </svg>
+      ) : (
+        user.name.charAt(0).toUpperCase()
+      )}
+    </div>
+  );
+}
 
 export default function LoginPage() {
   const { currentUser, setCurrentUser, forgetPersistedUser } = useUser();
@@ -113,9 +136,7 @@ export default function LoginPage() {
                   onClick={() => handleSelectUser(user)}
                   className="w-full bg-white dark:bg-gray-900 rounded-2xl p-4 border border-gray-100 dark:border-gray-800 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-md transition-all text-left flex items-center gap-4"
                 >
-                  <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg flex-shrink-0">
-                    {user.name.charAt(0).toUpperCase()}
-                  </div>
+                  <AvatarContent user={user} />
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-gray-900 dark:text-gray-100">{user.name}</p>
                     <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -150,8 +171,8 @@ export default function LoginPage() {
           ) : (
             <div className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm p-6">
               <div className="text-center mb-6">
-                <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-xl mx-auto mb-3">
-                  {selectedUser.name.charAt(0).toUpperCase()}
+                <div className="mx-auto mb-3 w-14 h-14 [&>div]:w-14 [&>div]:h-14 [&>div]:rounded-2xl [&>div]:text-xl">
+                  <AvatarContent user={selectedUser} />
                 </div>
                 <p className="font-bold text-gray-900 dark:text-gray-100 text-lg">{selectedUser.name}</p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">Ingresá tu PIN para continuar</p>

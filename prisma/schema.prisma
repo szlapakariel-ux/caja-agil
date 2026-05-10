@@ -65,8 +65,10 @@ model User {
   id        String   @id @default(cuid())
   name      String
   role      UserRole
-  pinDemo   String?  @map("pin_demo")
-  active    Boolean  @default(true)
+  pinDemo     String?  @map("pin_demo")
+  avatarColor String?  @map("avatar_color")
+  avatarIcon  String?  @map("avatar_icon")
+  active      Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
