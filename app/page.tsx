@@ -17,7 +17,7 @@ const AVATAR_COLORS: Record<string, { bg: string; text: string }> = {
 const DEFAULT_AVATAR = { bg: "bg-blue-100 dark:bg-blue-900/30", text: "text-blue-600 dark:text-blue-400" };
 
 function AvatarContent({ user }: { user: User }) {
-  const colors = (user.avatarColor && AVATAR_COLORS[user.avatarColor]) ?? DEFAULT_AVATAR;
+  const colors = (user.avatarColor ? AVATAR_COLORS[user.avatarColor] : undefined) ?? DEFAULT_AVATAR;
   const isMale = user.avatarIcon === "male";
   return (
     <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg flex-shrink-0 ${colors.bg} ${colors.text}`}>
